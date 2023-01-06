@@ -1,13 +1,17 @@
 import os
 import socket
 import threading
+
+from dotenv import load_dotenv
+
 from users import User
 
-MESSAGE_LENGTH = os.getenv('MESSAGE_LENGTH')
+load_dotenv()
+MESSAGE_LENGTH = int(os.getenv('MESSAGE_LENGTH'))
 CLIENTS = []
 
 
-def accept_connections(s):
+def accepta_connections(s):
     '''
     Accepts the connection
     '''
@@ -15,14 +19,14 @@ def accept_connections(s):
         try:
             client, _ = s.accept()
         except OSError:
-            print(OSError)
+            print(OSError.strerror)
 
         # Save the client to a list
         CLIENTS.append(client)
 
         # Handle multiple clients
         handle_connections = threading.Thread(
-            target=handle_multiple_connections, args=client)
+            target=handle_multiple_connections, args=(client, ))
 
         handle_connections.start()
 
@@ -31,16 +35,20 @@ def handle_multiple_connections(client):
     '''
     Listens for incoming messages from clients
     '''
-    try:
-        msg = client.recv(MESSAGE_LENGTH)
-    except socket.error:
-        print(socket.error)
+    curr_user = None
+    while True:
+        try:
+            msg = client.recv(MESSAGE_LENGTH).decode('utf-8')
+        except socket.error:
+            print(socket.error.strerror)
 
-    # Based on incoming message do actions
+        # Based on incoming message do actions
 
-    # JOIN message accepts the JOIN followed by the username
-    if msg.startswith('JOIN'):
-        username = msg.split(' ')[1:]
-        curr_user = User(client, username)
-    else:
-        pass
+        # JOIN message accepts the JOIN followed by the username
+        if msg.startswith('JOIN'):
+            if curr_user is None:
+                username = ' '.join(msg.split(' ')[1:])
+                curr_user = User(client, username)
+                continue
+        else:
+            pass
