@@ -1,3 +1,6 @@
+from ctypes import sizeof
+import json
+import sys
 import os
 import socket
 import threading
@@ -9,6 +12,7 @@ from users import User
 load_dotenv()
 MESSAGE_LENGTH = int(os.getenv('MESSAGE_LENGTH'))
 CLIENTS = []
+USERNAMES = []
 
 
 def accepta_connections(s):
@@ -35,7 +39,9 @@ def handle_multiple_connections(client):
     '''
     Listens for incoming messages from clients
     '''
-    curr_user = None
+    collect_message = ''
+    curr_user = False
+
     while True:
         try:
             msg = client.recv(MESSAGE_LENGTH).decode('utf-8')
@@ -43,12 +49,49 @@ def handle_multiple_connections(client):
             print(socket.error.strerror)
 
         # Based on incoming message do actions
+        collect_message += msg
+        if collect_message.startswith('START ') and collect_message.endswith(' END'):
+            collect_message = collect_message.replace(
+                'START ', '').replace(' END', '')
 
-        # JOIN message accepts the JOIN followed by the username
-        if msg.startswith('JOIN'):
-            if curr_user is None:
-                username = ' '.join(msg.split(' ')[1:])
-                curr_user = User(client, username)
-                continue
-        else:
-            pass
+            data = json.loads(collect_message.strip())
+            method = data['method']
+            username = data['username']
+            if not curr_user:
+                if method == 'JOIN':
+                    curr_user = True
+                    USERNAMES.append(username)
+                    msg = {
+                        'users': USERNAMES,
+                        'event': 'new_user',
+                        'data': {
+                            'username': username,
+                            'msg': 'connected'
+                        }
+                    }
+                    m = f"START {json.dumps(msg)} END"
+                    message = m.encode('utf-8')
+                    for cli in CLIENTS:
+                        cli.send(message)
+
+            elif method == 'LEAVE':
+                for user in USERNAMES:
+                    if user == username:
+                        USERNAMES.remove(user)
+                for user in CLIENTS:
+                    if user.username == username:
+                        CLIENTS.remove(user)
+
+                msg = {
+                    'username': username,
+                    'event': 'user_left',
+                    'data': {
+                        'msg': 'disconect'
+                    }
+                }
+                m = f"START {json.dumps(msg)} END"
+                message = m.encode('utf-8')
+                client.send(message)
+                client.close()
+
+            collect_message = ''
